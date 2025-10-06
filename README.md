@@ -14,9 +14,22 @@ cd local-cluster
 make start
 ```
 
+**Note**: The cluster takes approximately **10-15 minutes** to fully start and initialize all services. This includes downloading container images, configuring services, and waiting for all pods to become ready.
+
 ## 📋 Prerequisites
 
-Before starting, ensure you have the following tools installed on your system:
+Before starting, ensure you have the following tools installed on your system and sufficient system resources available.
+
+### System Requirements
+
+The Kind cluster requires significant system resources to run all components smoothly:
+
+| Resource          | Minimum | Recommended | Notes                                           |
+| ----------------- | ------- | ----------- | ----------------------------------------------- |
+| **CPU**           | 4 cores | 8+ cores    | Multi-core recommended for better performance   |
+| **RAM**           | 8 GB    | 16+ GB      | More RAM allows for larger workloads            |
+| **Disk Space**    | 20 GB   | 50+ GB      | For Docker images, logs, and persistent volumes |
+| **Docker Memory** | 6 GB    | 12+ GB      | Allocate in Docker Desktop settings             |
 
 ### Required Tools
 
@@ -97,6 +110,8 @@ This will:
 - Install Prometheus monitoring stack
 - Deploy ArgoCD for GitOps
 - Install Forgejo Git platform
+
+**⏱️ Expected Duration**: The complete setup process takes approximately **10-15 minutes** depending on your system resources and internet connection speed.
 
 ### 2. Verify Installation
 
