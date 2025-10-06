@@ -6,17 +6,12 @@ A complete local Kubernetes development environment using Kind (Kubernetes in Do
 
 ```bash
 # Clone the repository (if not already done)
-git clone <repository-url>
+git clone https://github.com/djovap/local-cluster.git
+
 cd local-cluster
 
 # Start the complete development environment
 make start
-
-# Check status of all services
-make status
-
-# Clean up everything
-make clean
 ```
 
 ## 📋 Prerequisites
