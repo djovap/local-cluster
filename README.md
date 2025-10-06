@@ -238,6 +238,8 @@ helm pull oci://forgejo.localhost/forge/mychart --version 1.0.0 --plain-http
 http://forgejo.localhost/forge/-/packages
 ```
 
+**Note**: Since this is a development environment using HTTP instead of HTTPS, all Helm operations with the OCI registry must include the `--plain-http` flag.
+
 ### Git Repository
 
 ```bash
