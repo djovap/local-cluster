@@ -1,4 +1,4 @@
-# Dex OIDC configuration for Kappsul development
+# Dex OIDC configuration for development environment
 image:
   tag: v2.38.0
 

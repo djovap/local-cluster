@@ -420,7 +420,6 @@ data:
             ${ingress_ip} argocd.localhost
             ${ingress_ip} grafana.localhost
             ${ingress_ip} forgejo.localhost
-            ${ingress_ip} kappsul.localhost
             fallthrough
         }
         prometheus :9153
@@ -800,9 +799,9 @@ main() {
     echo -e "  🐙 Git Platform: ${BLUE}http://forgejo.localhost${NC} (OIDC available)"
     echo -e ""
     echo -e "${CYAN}Test Users (password: 'password' for all):${NC}"
-    echo -e "  👑 Dev Admin 1: ${YELLOW}dev1@kappsul.dev${NC} (super-admin)"
-    echo -e "  👑 Dev Admin 2: ${YELLOW}dev2@kappsul.dev${NC} (admin)"
-    echo -e "  👤 Regular User: ${YELLOW}user1@kappsul.dev${NC}"
+    echo -e "  👑 Dev Admin 1: ${YELLOW}dev1@local.dev${NC} (super-admin)"
+    echo -e "  👑 Dev Admin 2: ${YELLOW}dev2@local.dev${NC} (admin)"
+    echo -e "  👤 Regular User: ${YELLOW}user1@local.dev${NC}"
     echo -e ""
     echo -e "${CYAN}Helm Package Registry:${NC}"
     echo -e "  📦 Push Helm Chart: ${BLUE}helm push mychart-1.0.0.tgz oci://forgejo.localhost/forge --plain-http${NC}"

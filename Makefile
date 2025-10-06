@@ -1,5 +1,5 @@
 # =============================================================================
-# Kappsul Local Development Environment
+# Local Development Environment
 # =============================================================================
 # This Makefile provides easy commands to manage the local Kubernetes
 # development environment using Kind with OIDC integration, ArgoCD, 
@@ -29,7 +29,7 @@ NC := \033[0m
 
 .PHONY: help
 help: ## Show this help message
-	@printf "$(CYAN)Kappsul Local Development Environment$(NC)\n"
+	@printf "$(CYAN)Local Cluster Development Environment$(NC)\n"
 	@printf "$(CYAN)=====================================$(NC)\n"
 	@printf "\n"
 	@printf "$(BLUE)Available commands:$(NC)\n"
@@ -47,7 +47,7 @@ help: ## Show this help message
 
 .PHONY: start
 start: ## Start the complete development environment
-	@printf "$(PURPLE)🚀 Starting Kappsul Local Development Environment$(NC)\n"
+	@printf "$(PURPLE)🚀 Starting Local Development Environment$(NC)\n"
 	@printf "$(PURPLE)================================================$(NC)\n"
 	@printf "\n"
 	@chmod +x $(SCRIPTS_DIR)/setup-dev-env.sh
@@ -58,7 +58,7 @@ start: ## Start the complete development environment
 
 .PHONY: clean
 clean: ## Clean up all development environment resources
-	@printf "$(PURPLE)🧹 Cleaning up Kappsul Local Development Environment$(NC)\n"
+	@printf "$(PURPLE)🧹 Cleaning up Local Development Environment$(NC)\n"
 	@printf "$(PURPLE)===================================================$(NC)\n"
 	@printf "\n"
 	@chmod +x $(SCRIPTS_DIR)/cleanup-dev-env.sh
@@ -68,7 +68,7 @@ clean: ## Clean up all development environment resources
 
 .PHONY: status
 status: ## Check the status of all services
-	@printf "$(CYAN)📊 Kappsul Development Environment Status$(NC)\n"
+	@printf "$(CYAN)📊 Development Environment Status$(NC)\n"
 	@printf "$(CYAN)==========================================$(NC)\n"
 	@printf "\n"
 	@printf "$(BLUE)Kind Cluster Status:$(NC)\n"

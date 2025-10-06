@@ -1,4 +1,4 @@
-# Kappsul Local Development Environment
+# Local K8s Development Environment
 
 A complete local Kubernetes development environment using Kind (Kubernetes in Docker) with OIDC integration, ArgoCD, Prometheus monitoring, and Forgejo Git platform & Packages registry.
 
@@ -132,11 +132,11 @@ Once the environment is ready, you can access:
 
 The following test users are pre-configured (password: `password` for all):
 
-| User             | Email             | Role        | Permissions         |
-| ---------------- | ----------------- | ----------- | ------------------- |
-| **Dev Admin 1**  | dev1@kappsul.dev  | super-admin | Full cluster access |
-| **Dev Admin 2**  | dev2@kappsul.dev  | admin       | Full cluster access |
-| **Regular User** | user1@kappsul.dev | user        | Read-only access    |
+| User             | Email           | Role        | Permissions         |
+| ---------------- | --------------- | ----------- | ------------------- |
+| **Dev Admin 1**  | dev1@local.dev  | super-admin | Full cluster access |
+| **Dev Admin 2**  | dev2@local.dev  | admin       | Full cluster access |
+| **Regular User** | user1@local.dev | user        | Read-only access    |
 
 ## 🛠️ Available Commands
 
