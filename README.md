@@ -138,6 +138,36 @@ The following test users are pre-configured (password: `password` for all):
 | **Dev Admin 2**  | dev2@local.dev  | admin       | Full cluster access |
 | **Regular User** | user1@local.dev | user        | Read-only access    |
 
+### 5. Git Forge Organization
+
+The Forgejo Git platform automatically creates a **"forge"** organization with the following setup:
+
+#### Organization Structure
+
+- **Name**: `forge`
+- **Visibility**: Public
+- **Purpose**: Default organization for projects and packages
+
+#### OIDC User Roles in "forge" Organization
+
+| User             | Email           | Organization Role | Permissions                                      |
+| ---------------- | --------------- | ----------------- | ------------------------------------------------ |
+| **Dev Admin 1**  | dev1@local.dev  | **Owner**         | Full access to all repositories and packages     |
+| **Dev Admin 2**  | dev2@local.dev  | **Developer**     | Write access to repositories, package management |
+| **Regular User** | user1@local.dev | **Viewer**        | Read-only access to repositories and packages    |
+
+#### Available Repositories
+
+- **Git Repository**: `http://forgejo.localhost/forge/repo.git`
+- **Package Registry**: `http://forgejo.localhost/forge/-/packages`
+- **Helm Charts**: `oci://forgejo.localhost/forge/`
+
+#### Teams in "forge" Organization
+
+- **owners**: Full administrative access
+- **developers**: Write access to repositories and packages
+- **viewers**: Read-only access to repositories and packages
+
 ## 🛠️ Available Commands
 
 ### Main Commands
@@ -168,6 +198,26 @@ All configuration files are located in the `configs/` directory:
 - `forgejo-values.yaml`: Forgejo Git platform configuration
 - `openldap-values.yaml`: OpenLDAP server configuration
 
+### Local Helm Charts
+
+The `charts/setup/` directory contains local copies of all Helm charts used in the setup:
+
+| Chart          | Version | Purpose                |
+| -------------- | ------- | ---------------------- |
+| **dex**        | 0.24.0  | OIDC Identity Provider |
+| **openldap**   | 2.0.4   | LDAP Server            |
+| **prometheus** | 77.13.0 | Monitoring Stack       |
+| **argocd**     | 8.5.8   | GitOps Platform        |
+| **forgejo**    | 12.0.4  | Git Platform           |
+
+#### Using Local Charts
+
+The setup script automatically uses local charts when available, falling back to remote repositories if not found. This ensures:
+
+- **Faster setup**: No need to download charts during each setup
+- **Version consistency**: Always uses the exact same chart versions
+- **Offline capability**: Can work without internet access after initial download
+
 ## 📦 Package Management
 
 ### Helm Package Registry
@@ -178,11 +228,14 @@ The environment includes a Helm package registry accessible via Forgejo:
 # Login to the registry
 helm registry login forgejo.localhost --username platform-admin --password password --insecure
 
-# Push a chart
+# Push a chart to forge organization
 helm push mychart-1.0.0.tgz oci://forgejo.localhost/forge --plain-http
 
-# Pull a chart
+# Pull a chart from forge organization
 helm pull oci://forgejo.localhost/forge/mychart --version 1.0.0 --plain-http
+
+# Access package registry UI
+http://forgejo.localhost/forge/-/packages
 ```
 
 ### Git Repository
