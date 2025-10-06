@@ -465,12 +465,12 @@ setup_dex_oidc() {
     
     # Check if local chart exists, otherwise use remote repo
     local dex_chart=""
-    if [ -f "$PROJECT_ROOT/charts/setup/dex-"*.tgz ]; then
+    if ls "$PROJECT_ROOT/charts/setup/dex-"*.tgz 1> /dev/null 2>&1; then
         dex_chart=$(ls "$PROJECT_ROOT/charts/setup/dex-"*.tgz | head -1)
         info "Using local Dex chart: $dex_chart"
     else
         # Add Dex repo with retry
-        info "Adding Dex Helm repository..."
+        info "Local Dex chart not found, adding remote repository..."
         retry_with_backoff 3 "helm repo add dex https://charts.dexidp.io"
         retry_with_backoff 3 "helm repo update"
         dex_chart="dex/dex"
@@ -534,12 +534,12 @@ setup_openldap() {
     
     # Check if local chart exists, otherwise use remote repo
     local openldap_chart=""
-    if [ -f "$PROJECT_ROOT/charts/setup/openldap-"*.tgz ]; then
+    if ls "$PROJECT_ROOT/charts/setup/openldap-"*.tgz 1> /dev/null 2>&1; then
         openldap_chart=$(ls "$PROJECT_ROOT/charts/setup/openldap-"*.tgz | head -1)
         info "Using local OpenLDAP chart: $openldap_chart"
     else
         # Add helm-openldap repo for OpenLDAP with retry
-        info "Adding OpenLDAP Helm repository..."
+        info "Local OpenLDAP chart not found, adding remote repository..."
         retry_with_backoff 3 "helm repo add helm-openldap https://jp-gouin.github.io/helm-openldap"
         retry_with_backoff 3 "helm repo update"
         openldap_chart="helm-openldap/openldap"
@@ -585,12 +585,12 @@ setup_prometheus() {
     
     # Check if local chart exists, otherwise use remote repo
     local prometheus_chart=""
-    if [ -f "$PROJECT_ROOT/charts/setup/kube-prometheus-stack-"*.tgz ]; then
-        prometheus_chart=$(ls "$PROJECT_ROOT/charts/setup/kube-prometheus-stack-"*.tgz | head -1)
+    if ls "$PROJECT_ROOT/charts/setup/prometheus-"*.tgz 1> /dev/null 2>&1; then
+        prometheus_chart=$(ls "$PROJECT_ROOT/charts/setup/prometheus-"*.tgz | head -1)
         info "Using local Prometheus chart: $prometheus_chart"
     else
         # Add Prometheus community repo
-        info "Adding Prometheus community Helm repository..."
+        info "Local Prometheus chart not found, adding remote repository..."
         retry_with_backoff 3 "helm repo add prometheus-community https://prometheus-community.github.io/helm-charts"
         retry_with_backoff 3 "helm repo update"
         prometheus_chart="prometheus-community/kube-prometheus-stack"
@@ -653,12 +653,12 @@ setup_argocd() {
     
     # Check if local chart exists, otherwise use remote repo
     local argocd_chart=""
-    if [ -f "$PROJECT_ROOT/charts/setup/argo-cd-"*.tgz ]; then
-        argocd_chart=$(ls "$PROJECT_ROOT/charts/setup/argo-cd-"*.tgz | head -1)
+    if ls "$PROJECT_ROOT/charts/setup/argocd-"*.tgz 1> /dev/null 2>&1; then
+        argocd_chart=$(ls "$PROJECT_ROOT/charts/setup/argocd-"*.tgz | head -1)
         info "Using local ArgoCD chart: $argocd_chart"
     else
         # Add ArgoCD repo
-        info "Adding ArgoCD Helm repository..."
+        info "Local ArgoCD chart not found, adding remote repository..."
         retry_with_backoff 3 "helm repo add argo https://argoproj.github.io/argo-helm"
         retry_with_backoff 3 "helm repo update"
         argocd_chart="argo/argo-cd"
@@ -713,10 +713,11 @@ setup_forgejo() {
     
     # Check if local chart exists, otherwise use remote repo
     local forgejo_chart=""
-    if [ -f "$PROJECT_ROOT/charts/setup/forgejo-"*.tgz ]; then
+    if ls "$PROJECT_ROOT/charts/setup/forgejo-"*.tgz 1> /dev/null 2>&1; then
         forgejo_chart=$(ls "$PROJECT_ROOT/charts/setup/forgejo-"*.tgz | head -1)
         info "Using local Forgejo chart: $forgejo_chart"
     else
+        info "Local Forgejo chart not found, using remote OCI registry..."
         forgejo_chart="oci://code.forgejo.org/forgejo-helm/forgejo"
         info "Using remote Forgejo chart: $forgejo_chart"
     fi
