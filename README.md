@@ -206,4 +206,4 @@ git remote set-url origin http://forgejo.localhost/forge/repo.git
 
 ---
 
-**Happy developing! 🚀**
+**Happy cloud-native developing! 🚀**
