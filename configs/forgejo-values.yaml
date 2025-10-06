@@ -1,0 +1,270 @@
+# Forgejo configuration for Kind development cluster
+# Integrated with existing Dex OIDC authentication
+image: 
+  tag: "12.0.4"
+
+# Service configuration - HTTP and SSH for package registries  
+service:
+  type: ClusterIP
+  http:
+    port: 3000
+
+# Ingress - Support for web UI and package registry endpoints
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Support for package registry uploads (larger file sizes)
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/client-max-body-size: "100m"
+  hosts:
+    - host: forgejo.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+        # Specific paths for package registries
+        - path: /api/packages
+          pathType: Prefix
+        - path: /-/
+          pathType: Prefix
+        # Container/OCI registry endpoints (Docker Registry API v2)
+        - path: /v2/
+          pathType: Prefix
+  tls: []
+
+# Persistence for data
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 10Gi
+
+# Basic resource limits
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Gitea/Forgejo configuration (Forgejo helm chart uses gitea keys)
+gitea:
+  admin: 
+    username: platform-admin
+    password: password 
+    email: platform-admin@local.dev
+  config:
+    # SQLite database (simple for development)
+    database:
+      DB_TYPE: sqlite3
+      PATH: "/data/forgejo/forgejo.db"
+
+    # Server settings
+    server:
+      DOMAIN: forgejo.localhost
+      ROOT_URL: "http://forgejo.localhost"
+      HTTP_PORT: 3000
+      ENABLE_OPENID_SIGNIN: true
+      # Force HTTP for package registry
+      PROTOCOL: http
+
+    # Basic security
+    security:
+      INSTALL_LOCK: true
+      SECRET_KEY: "dev-secret-key"
+      INTERNAL_TOKEN: "dev-internal-token"
+
+    # Service settings
+    service:
+      DISABLE_REGISTRATION: true
+      REQUIRE_SIGNIN_VIEW: false
+      DEFAULT_USER_IS_RESTRICTED: false
+      DEFAULT_ALLOW_CREATE_ORGANIZATION: true
+      DEFAULT_USER_VISIBILITY: public
+
+    # User settings - Set defaults for new users
+    user:
+      REQUIRE_EMAIL_CONFIRMATION: false
+      DEFAULT_THEME: auto
+
+    # Organization settings - Make organizations visible to all users
+    admin:
+      DISABLE_REGULAR_ORG_CREATION: false
+      DEFAULT_ORG_VISIBILITY: public
+      DEFAULT_ORG_MEMBER_VISIBLE: true
+
+    # OIDC client configuration for auto-registration and account linking
+    oauth2_client:
+      ENABLE_AUTO_REGISTRATION: true
+      ACCOUNT_LINKING: auto
+      USERNAME: email
+      EMAIL: email
+      OPENID_CONNECT_SCOPES: "openid profile email groups"
+      UPDATE_AVATAR: false
+      AUTO_DISCOVER_PUBLIC_KEYS: true
+      # Enable organization creation through OIDC
+      ENABLE_ORG_CREATE: true
+
+    # Package registry configuration - Enable Helm charts and other packages
+    packages:
+      ENABLED: true
+      HELM_CHARTS_ENABLED: true
+      CONTAINER_ENABLED: true
+      LIMIT_TOTAL_OWNER_COUNT: -1
+      LIMIT_SIZE_UPLOAD: -1
+      # Force HTTP for package registry endpoints
+      REGISTRY_HOST: "forgejo.localhost"
+      REGISTRY_PROTOCOL: "http"
+
+    # Repository settings - Allow package/repo creation
+    repository:
+      ENABLE_PUSH_CREATE_USER: true
+      ENABLE_PUSH_CREATE_ORG: true
+
+  # OIDC Authentication with Dex
+  oauth:
+    - name: "dex"
+      provider: "openidConnect"
+      key: "forgejo" 
+      secret: "forgejo-secret"
+      autoDiscoverUrl: "http://dex.dex.svc.cluster.local:5556/.well-known/openid-configuration"
+      scopes: "openid profile email"
+      groupClaimName: "groups"
+      adminGroup: "super-admins"
+      restrictedGroup: ""
+      groupTeamMap: '{"super-admins": {"forge": ["owners"]},"admins": {"forge": ["developers"]},"users": {"forge": ["viewers"]}}'
+      groupTeamMapRemoval: true
+
+# Basic monitoring
+metrics:
+  enabled: true
+
+# Init container configuration for Forgejo Helm chart  
+initContainers:
+  # Resources for init containers
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Extra sidecar container for organization and team setup
+extraContainers:
+  - name: org-teams-setup
+    image: alpine/curl:8.4.0
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    restartPolicy: OnFailure
+    env:
+    - name: FORGEJO_URL
+      value: "http://localhost:3000"
+    - name: FORGEJO_ADMIN_USER
+      value: "platform-admin"
+    - name: FORGEJO_ADMIN_PASSWORD
+      value: "password"
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "Forge setup container starting..."
+      
+      # Install jq for JSON processing
+      apk add --no-cache jq
+      
+      # Wait for Forgejo API to be ready
+      echo "Waiting for Forgejo API to be ready..."
+      until curl -f -s ${FORGEJO_URL}/api/v1/version; do
+        echo "Waiting for Forgejo API to be ready..."
+        sleep 10
+      done
+      
+      echo "Forgejo API is ready! Setting up forge organization and teams..."
+      
+      # Check if organization already exists to avoid duplicate work
+      ORG_CHECK=$(curl -s -u "${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}" \
+        ${FORGEJO_URL}/api/v1/orgs/forge || echo "not found")
+      
+      if echo "$ORG_CHECK" | grep -q '"username":"forge"'; then
+        echo "Forge organization already exists, skipping creation..."
+      else
+        echo "Creating forge organization..."
+        
+        # Create forge organization using basic auth
+        ORG_RESPONSE=$(curl -s -X POST \
+          -u "${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "username": "forge",
+            "full_name": "Forge Organization", 
+            "description": "Default organization for projects and packages",
+            "visibility": "public",
+            "repo_admin_change_team_access": true
+          }' \
+          ${FORGEJO_URL}/api/v1/orgs)
+        
+        if echo "$ORG_RESPONSE" | grep -q "forge"; then
+          echo "Forge organization created successfully"
+        else
+          echo "Failed to create forge organization: $ORG_RESPONSE"
+          exit 1
+        fi
+      fi
+      
+      # Create teams within the forge organization
+      echo "Creating teams in forge organization..."
+      
+      # Create owners team
+      OWNERS_RESPONSE=$(curl -s -X POST \
+        -u "${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "owners",
+          "description": "Organization owners with full access",
+          "permission": "admin"
+        }' \
+        ${FORGEJO_URL}/api/v1/orgs/forge/teams)
+      echo "Owners team: $OWNERS_RESPONSE"
+      
+      # Create developers team  
+      DEVS_RESPONSE=$(curl -s -X POST \
+        -u "${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "developers", 
+          "description": "Developers with write access to repositories",
+          "permission": "write",
+          "units": ["repo.code", "repo.issues", "repo.pulls", "repo.releases", "repo.wiki", "repo.ext_wiki", "repo.ext_issues"]
+        }' \
+        ${FORGEJO_URL}/api/v1/orgs/forge/teams)
+      echo "Developers team: $DEVS_RESPONSE"
+      
+      # Create viewers team
+      VIEWERS_RESPONSE=$(curl -s -X POST \
+        -u "${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "viewers",
+          "description": "Users with read access to repositories and packages", 
+          "permission": "read",
+          "units": ["repo.code", "repo.issues", "repo.pulls", "repo.releases", "repo.wiki"]
+        }' \
+        ${FORGEJO_URL}/api/v1/orgs/forge/teams)
+      echo "Viewers team: $VIEWERS_RESPONSE"
+      
+      echo "✅ Forge organization and teams setup completed!"
+      
+      # Keep container alive to prevent restart loops
+      echo "Setup completed."
+      while true; do
+        sleep 3600  # Sleep for 1 hour intervals
+      done

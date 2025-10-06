@@ -1,0 +1,148 @@
+# ArgoCD configuration for Kind development cluster
+# Integrated with existing Dex OIDC authentication
+
+# Global configuration
+global:
+  image:
+    tag: "v2.11.7"
+
+# ArgoCD Server configuration
+server:
+  # Server configuration
+  replicas: 1
+  
+  # Resources for development
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  
+  # Ingress configuration
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostname: argocd.localhost
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    tls: false
+  
+  
+  # RBAC configuration
+  rbacConfig:
+    policy.default: role:readonly
+    policy.csv: |
+      # Super admins have full access
+      g, super-admins, role:admin
+      
+      # Admins have full access  
+      g, admins, role:admin
+      
+      # Users have readonly access
+      g, users, role:readonly
+      
+      # Policy definitions
+      p, role:admin, applications, *, */*, allow
+      p, role:admin, clusters, *, *, allow
+      p, role:admin, repositories, *, *, allow
+      p, role:admin, certificates, *, *, allow
+      p, role:admin, accounts, *, *, allow
+      p, role:admin, gpgkeys, *, *, allow
+      
+      p, role:readonly, applications, get, */*, allow
+      p, role:readonly, clusters, get, *, allow
+      p, role:readonly, repositories, get, *, allow
+      p, role:readonly, certificates, get, *, allow
+      
+  # Additional command arguments
+  extraArgs:
+    - --insecure
+  
+  # Service configuration for HTTP
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+# ArgoCD Repository Server
+repoServer:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# ArgoCD Application Controller
+controller:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# ArgoCD Dex (disable since we use external Dex)
+dex:
+  enabled: false
+
+# Redis configuration
+redis:
+  enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# ArgoCD configuration
+configs:
+  # ArgoCD Server configuration
+  cm:
+    # URL configuration
+    url: "http://argocd.localhost"
+    
+    # Ensure proper insecure server configuration
+    server.insecure: "true"
+    
+    # OIDC configuration using existing Dex
+    oidc.config: |
+      name: Dex OIDC
+      issuer: http://dex.localhost
+      clientId: argocd
+      clientSecret: argocd-secret
+      requestedScopes: ["openid", "profile", "email", "groups"]
+      requestedIDTokenClaims: {"groups": {"essential": true}}
+    
+    # Additional configuration
+    application.instanceLabelKey: argocd.argoproj.io/instance
+    
+  # Repository configuration
+  repositories:
+    # Example: Add your Git repositories here
+    # private-repo:
+    #   url: https://github.com/your-org/your-repo
+    #   type: git
+    #   name: private-repo
+
+# Monitoring configuration (integrates with Prometheus)
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    additionalLabels:
+      app.kubernetes.io/component: monitoring
+
+# Notifications (optional)
+notifications:
+  enabled: false

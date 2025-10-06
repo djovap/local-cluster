@@ -1,0 +1,99 @@
+# Dex OIDC configuration for Kappsul development
+image:
+  tag: v2.38.0
+
+# Use HTTP for development simplicity (no certificates needed)
+https:
+  enabled: false
+
+# Disable gRPC to avoid additional port conflicts
+grpc:
+  enabled: false
+
+config:
+  issuer: http://dex.localhost
+  
+  storage:
+    type: kubernetes
+    config:
+      inCluster: true
+
+  connectors:
+    - type: ldap
+      name: OpenLDAP
+      id: ldap
+      config:
+        host: openldap.ldap:389
+
+        # No TLS for development setup
+        insecureNoSSL: true
+
+        # Admin credentials for LDAP binding
+        bindDN: cn=admin,dc=example,dc=com
+        bindPW: password
+
+        usernamePrompt: Email Address
+
+        userSearch:
+          baseDN: ou=people,dc=example,dc=com
+          filter: "(objectClass=person)"
+          username: mail
+          idAttr: DN
+          emailAttr: mail
+          nameAttr: cn
+
+        groupSearch:
+          baseDN: ou=groups,dc=example,dc=com
+          filter: "(objectClass=groupOfNames)"
+          userAttr: DN
+          groupAttr: member
+          nameAttr: cn
+
+  oauth2:
+    skipApprovalScreen: true
+
+  staticClients:
+    - id: argocd
+      redirectURIs:
+        - "http://argocd.localhost/auth/callback"
+      name: "ArgoCD Development"
+      secret: argocd-secret
+
+    - id: grafana
+      redirectURIs:
+        - "http://grafana.localhost/login/generic_oauth"
+      name: "Grafana Development"
+      secret: grafana-secret
+
+    - id: forgejo
+      redirectURIs:
+        - "http://forgejo.localhost/user/oauth2/dex/callback"
+      name: "Forgejo Development"
+      secret: forgejo-secret
+
+service:
+  type: NodePort
+  ports:
+    http:
+      nodePort: 32000
+      port: 5556
+      targetPort: 5556
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+  hosts:
+    - host: dex.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 50Mi
+  requests:
+    cpu: 10m
+    memory: 20Mi

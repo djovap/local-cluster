@@ -1,0 +1,133 @@
+# OpenLDAP configuration for development
+# Based on helm-openldap/openldap chart (jp-gouin)
+
+# Deployment configuration
+replicaCount: 1 # Single replica for development
+strategy:
+  type: Recreate # Simple recreation strategy for dev
+
+# Image configuration
+image:
+  repository: osixia/openldap
+  tag: 1.5.0
+  pullPolicy: IfNotPresent
+
+# Logging
+logLevel: info
+
+# TLS disabled for development simplicity
+tls:
+  enabled: false
+
+# LDAP Environment variables
+env:
+  LDAP_LOG_LEVEL: "256"
+  LDAP_ORGANISATION: "Local Development"
+  LDAP_DOMAIN: "example.com"
+  LDAP_READONLY_USER: "false"
+  LDAP_BACKEND: "mdb"
+  LDAP_TLS: "false"
+  LDAP_TLS_ENFORCE: "false"
+  CONTAINER_LOG_LEVEL: "4"
+  KEEP_EXISTING_CONFIG: "false"
+  LDAP_REMOVE_CONFIG_AFTER_SETUP: "true"
+
+# Admin credentials
+adminPassword: password
+configPassword: password
+
+# Custom LDIF files to initialize users and groups
+customLdifFiles:
+  01-users.ldif: |-
+    # People organizational unit
+    dn: ou=people,dc=example,dc=com
+    objectClass: organizationalUnit
+    ou: people
+
+    # LDAP Admin user (for binding)
+    dn: cn=admin,dc=example,dc=com
+    objectClass: person
+    objectClass: inetOrgPerson
+    sn: Administrator
+    cn: admin
+    uid: admin
+    mail: admin@local.dev
+    businessCategory: admin
+    userpassword: password
+
+    # Developer user 1 (Super Admin)
+    dn: cn=developer1,ou=people,dc=example,dc=com
+    objectClass: person
+    objectClass: inetOrgPerson
+    sn: Developer
+    cn: developer1
+    uid: developer1
+    mail: dev1@local.dev
+    businessCategory: dev
+    userpassword: password
+
+    # Developer user 2 (Admin)
+    dn: cn=developer2,ou=people,dc=example,dc=com
+    objectClass: person
+    objectClass: inetOrgPerson
+    sn: Developer
+    cn: developer2
+    uid: developer2
+    mail: dev2@local.dev
+    businessCategory: dev
+    userpassword: password
+
+    # Regular user
+    dn: cn=user1,ou=people,dc=example,dc=com
+    objectClass: person
+    objectClass: inetOrgPerson
+    sn: User
+    cn: user1
+    uid: user1
+    mail: user1@local.dev
+    businessCategory: user
+    userpassword: password
+
+    # Groups organizational unit
+    dn: ou=groups,dc=example,dc=com
+    objectClass: organizationalUnit
+    ou: groups
+
+    # Super admins group
+    dn: cn=super-admins,ou=groups,dc=example,dc=com
+    objectClass: groupOfNames
+    cn: super-admins
+    member: cn=developer1,ou=people,dc=example,dc=com
+
+    # Admins group
+    dn: cn=admins,ou=groups,dc=example,dc=com
+    objectClass: groupOfNames
+    cn: admins
+    member: cn=developer2,ou=people,dc=example,dc=com
+
+    # Users group
+    dn: cn=users,ou=groups,dc=example,dc=com
+    objectClass: groupOfNames
+    cn: users
+    member: cn=user1,ou=people,dc=example,dc=com
+
+# Service configuration
+service:
+  type: ClusterIP
+  ldapPort: 389
+
+# Resource limits
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+# Disable problematic ingress resources (incompatible with K8s 1.22+)
+ltb-passwd:
+  enabled: false
+
+phpldapadmin:
+  enabled: false
