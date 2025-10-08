@@ -1,0 +1,74 @@
+# =============================================================================
+# Mailpit Configuration for Local Development Environment
+# =============================================================================
+# Email and SMTP testing tool with API for developers
+# Repository: https://github.com/axllent/mailpit
+# Chart: jouve/mailpit
+
+# Override the full name to ensure consistent service naming
+fullnameOverride: "mailpit-service"
+
+# Service configuration for cross-namespace access
+service:
+  type: ClusterIP  # Internal cluster access only
+  ports:
+    smtp: 1025      # SMTP port for email sending
+    http: 8025      # HTTP port for web UI
+
+# Ingress configuration for external UI access
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: mailpit.localhost
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Mailpit specific configuration
+mailpit:
+  # SMTP server configuration
+  smtp:
+    enabled: true
+    port: 1025
+  
+  # Web UI configuration
+  ui:
+    enabled: true
+    port: 8025
+  
+  # Database configuration (in-memory for development)
+  database:
+    type: memory
+  
+  # Message retention settings
+  retention:
+    maxMessages: 1000  # Keep up to 1000 messages
+    maxAge: 7d         # Keep messages for 7 days
+
+# Security settings
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Node selector (no specific requirements for development)
+nodeSelector: {}
+
+# Tolerations (no specific requirements for development)
+tolerations: []
+
+# Affinity (no specific requirements for development)
+affinity: {}

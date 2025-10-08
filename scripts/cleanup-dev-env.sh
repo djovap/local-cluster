@@ -61,7 +61,7 @@ cleanup_namespaces() {
         return 0
     fi
     
-    local namespaces=("monitoring" "dex" "ldap" "argocd" "forgejo")
+    local namespaces=("monitoring" "dex" "ldap" "argocd" "forgejo" "mailpit")
     
     for ns in "${namespaces[@]}"; do
         if kubectl get namespace "$ns" &> /dev/null; then

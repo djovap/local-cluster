@@ -70,6 +70,10 @@ The development environment consists of the following components:
 - **ArgoCD**: GitOps continuous deployment
 - **Forgejo**: Git platform with package registry
 
+### Email Testing
+
+- **Mailpit**: Email and SMTP testing tool with API for developers
+
 ### Monitoring & Observability
 
 - **Prometheus**: Metrics collection and alerting
@@ -80,12 +84,14 @@ The development environment consists of the following components:
 
 | Service          | URL                           | Purpose               |
 | ---------------- | ----------------------------- | --------------------- |
-| **Dex OIDC**     | http://dex.localhost          | Identity provider     |
-| **ArgoCD**       | http://argocd.localhost       | GitOps platform       |
-| **Grafana**      | http://grafana.localhost      | Monitoring dashboards |
-| **Forgejo**      | http://forgejo.localhost      | Git platform          |
-| **Prometheus**   | localhost:9090 (port-forward) | Metrics server        |
 | **AlertManager** | localhost:9093 (port-forward) | Alert management      |
+| **ArgoCD**       | http://argocd.localhost       | GitOps platform       |
+| **Dex OIDC**     | http://dex.localhost          | Identity provider     |
+| **Forgejo**      | http://forgejo.localhost      | Git platform          |
+| **Grafana**      | http://grafana.localhost      | Monitoring dashboards |
+| **LDAP Admin**   | http://ldap.localhost         | LDAP management UI    |
+| **Mailpit**      | http://mailpit.localhost      | Email testing UI      |
+| **Prometheus**   | localhost:9090 (port-forward) | Metrics server        |
 
 ## 🎯 Getting Started
 
@@ -110,6 +116,7 @@ This will:
 - Install Prometheus monitoring stack
 - Deploy ArgoCD for GitOps
 - Install Forgejo Git platform
+- Install Mailpit email testing tool
 
 **⏱️ Expected Duration**: The complete setup process takes approximately **10-15 minutes** depending on your system resources and internet connection speed.
 
@@ -127,8 +134,122 @@ Once the environment is ready, you can access:
 - **ArgoCD**: http://argocd.localhost (OIDC login required)
 - **Grafana**: http://grafana.localhost (OIDC login required)
 - **Forgejo**: http://forgejo.localhost (OIDC login available)
+- **LDAP Admin**: http://ldap.localhost (LDAP management interface)
+- **Mailpit**: http://mailpit.localhost (Email testing interface)
 
-### 4. Test Users
+### 4. Email Testing with Mailpit
+
+Mailpit provides a complete email testing solution for your development environment:
+
+#### SMTP Configuration for Applications
+
+Configure your applications to use Mailpit as their SMTP server:
+
+```yaml
+# Example SMTP configuration
+smtp:
+  host: "mailpit-service.mailpit.svc.cluster.local"
+  port: 1025
+  secure: false
+  auth:
+    enabled: false
+```
+
+#### Email Testing Features
+
+- **Web Interface**: View, search, and test emails at http://mailpit.localhost
+- **SMTP Server**: Receive emails from any application at `mailpit-service.mailpit.svc.cluster.local:1025`
+- **API Access**: Automated email testing via REST API
+- **HTML Preview**: Test email rendering across different clients
+- **Link Testing**: Verify links in emails work correctly
+- **Spam Testing**: Check email spam scores
+
+#### Usage Examples
+
+```bash
+# Test SMTP connection with telnet
+telnet mailpit-service.mailpit.svc.cluster.local 1025
+
+# Send test email with curl
+curl -X POST http://mailpit.localhost/api/v1/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "test@example.com",
+    "to": ["dev@local.dev"],
+    "subject": "Test Email",
+    "text": "This is a test email from Mailpit"
+  }'
+```
+
+### 5. LDAP Directory Service
+
+OpenLDAP provides a complete directory service for user authentication and authorization:
+
+#### LDAP Configuration for Applications
+
+Configure your applications to use OpenLDAP for authentication:
+
+```yaml
+# Example LDAP configuration
+ldap:
+  # Use headless service to connect directly to the pod
+  host: "openldap-0.openldap-headless.ldap.svc.cluster.local"
+  port: 389
+  secure: false
+  bindDN: "cn=admin,dc=ldap,dc=localhost"
+  bindPassword: "password"
+  baseDN: "dc=ldap,dc=localhost"
+  userSearchBase: "ou=people,dc=ldap,dc=localhost"
+  groupSearchBase: "ou=groups,dc=ldap,dc=localhost"
+```
+
+#### LDAP Directory Features
+
+- **Web Interface**: Manage users and groups at http://ldap.localhost
+- **LDAP Server**: Internal directory access at `openldap.ldap.svc.cluster.local:389`
+- **User Management**: Pre-configured users and groups for development
+- **Group-based Access**: Support for role-based access control
+- **phpLDAPadmin**: Web-based LDAP administration interface
+
+#### LDAP Directory Structure
+
+```
+dc=ldap,dc=localhost                          # Base DN
+├── ou=people,dc=ldap,dc=localhost            # Users organizational unit
+│   ├── cn=developer1,ou=people,dc=ldap,dc=localhost
+│   ├── cn=developer2,ou=people,dc=ldap,dc=localhost
+│   └── cn=user1,ou=people,dc=ldap,dc=localhost
+└── ou=groups,dc=ldap,dc=localhost            # Groups organizational unit
+    ├── cn=super-admins,ou=groups,dc=ldap,dc=localhost
+    ├── cn=admins,ou=groups,dc=ldap,dc=localhost
+    └── cn=users,ou=groups,dc=ldap,dc=localhost
+```
+
+#### Usage Examples
+
+```bash
+# Test LDAP connection with ldapsearch (use headless service)
+ldapsearch -x -H ldap://openldap-0.openldap-headless.ldap.svc.cluster.local:389 \
+  -D "cn=admin,dc=ldap,dc=localhost" -w password \
+  -b "dc=ldap,dc=localhost" "(objectClass=person)"
+
+# List all users
+ldapsearch -x -H ldap://openldap-0.openldap-headless.ldap.svc.cluster.local:389 \
+  -D "cn=admin,dc=ldap,dc=localhost" -w password \
+  -b "ou=people,dc=ldap,dc=localhost" "(objectClass=person)" cn mail
+
+# Search for a specific user by email
+ldapsearch -x -H ldap://openldap-0.openldap-headless.ldap.svc.cluster.local:389 \
+  -D "cn=admin,dc=ldap,dc=localhost" -w password \
+  -b "ou=people,dc=ldap,dc=localhost" "(mail=dev1@local.dev)"
+
+# List all groups
+ldapsearch -x -H ldap://openldap-0.openldap-headless.ldap.svc.cluster.local:389 \
+  -D "cn=admin,dc=ldap,dc=localhost" -w password \
+  -b "ou=groups,dc=ldap,dc=localhost" "(objectClass=groupOfNames)"
+```
+
+### 6. Test Users
 
 The following test users are pre-configured (password: `password` for all):
 
@@ -138,7 +259,7 @@ The following test users are pre-configured (password: `password` for all):
 | **Dev Admin 2**  | dev2@local.dev  | admin       | Full cluster access |
 | **Regular User** | user1@local.dev | user        | Read-only access    |
 
-### 5. Git Forge Organization
+### 7. Git Forge Organization
 
 The Forgejo Git platform automatically creates a **"forge"** organization with the following setup:
 
@@ -197,6 +318,7 @@ All configuration files are located in the `configs/` directory:
 - `prometheus-values.yaml`: Prometheus monitoring configuration
 - `forgejo-values.yaml`: Forgejo Git platform configuration
 - `openldap-values.yaml`: OpenLDAP server configuration
+- `mailpit-values.yaml`: Mailpit email testing configuration
 
 ### Local Helm Charts
 
@@ -208,7 +330,8 @@ The `charts/setup/` directory contains local copies of all Helm charts used in t
 | **openldap**   | 2.0.4   | LDAP Server            |
 | **prometheus** | 77.13.0 | Monitoring Stack       |
 | **argocd**     | 8.5.8   | GitOps Platform        |
-| **forgejo**    | 12.0.4  | Git Platform           |
+| **forgejo**    | 14.0.3  | Git Platform           |
+| **mailpit**    | 0.28.0  | Email Testing Tool     |
 
 #### Using Local Charts
 

@@ -420,6 +420,8 @@ data:
             ${ingress_ip} argocd.localhost
             ${ingress_ip} grafana.localhost
             ${ingress_ip} forgejo.localhost
+            ${ingress_ip} mailpit.localhost
+            ${ingress_ip} ldap.localhost
             fallthrough
         }
         prometheus :9153
@@ -534,15 +536,15 @@ setup_openldap() {
     
     # Check if local chart exists, otherwise use remote repo
     local openldap_chart=""
-    if ls "$PROJECT_ROOT/charts/setup/openldap-"*.tgz 1> /dev/null 2>&1; then
-        openldap_chart=$(ls "$PROJECT_ROOT/charts/setup/openldap-"*.tgz | head -1)
+    if ls "$PROJECT_ROOT/charts/setup/openldap-stack-ha-"*.tgz 1> /dev/null 2>&1; then
+        openldap_chart=$(ls "$PROJECT_ROOT/charts/setup/openldap-stack-ha-"*.tgz | head -1)
         info "Using local OpenLDAP chart: $openldap_chart"
     else
         # Add helm-openldap repo for OpenLDAP with retry
         info "Local OpenLDAP chart not found, adding remote repository..."
         retry_with_backoff 3 "helm repo add helm-openldap https://jp-gouin.github.io/helm-openldap"
         retry_with_backoff 3 "helm repo update"
-        openldap_chart="helm-openldap/openldap"
+        openldap_chart="helm-openldap/openldap-stack-ha"
         info "Using remote OpenLDAP chart: $openldap_chart"
     fi
     
@@ -559,6 +561,34 @@ setup_openldap() {
         warn "OpenLDAP statefulset not ready yet, but continuing..."
         info "Check OpenLDAP pod status: kubectl get pods -n ldap"
         info "Check OpenLDAP logs: kubectl logs -n ldap openldap-0"
+    fi
+    
+    # Wait additional time for OpenLDAP to fully initialize and auto-load LDIF files
+    info "Waiting for OpenLDAP to fully initialize and auto-load LDIF files..."
+    sleep 15
+    
+    # Verify LDAP users were loaded automatically via LDAP_SEED_INTERNAL_LDIF_PATH
+    info "Verifying LDAP users and groups were auto-loaded from custom LDIF files..."
+    if kubectl exec -n ldap openldap-0 -- ldapsearch -x -H ldap://localhost:389 -D "cn=admin,dc=ldap,dc=localhost" -w password -b "ou=people,dc=ldap,dc=localhost" "(mail=dev1@local.dev)" dn 2>&1 | grep -q "cn=developer1"; then
+        log "✓ LDAP users and groups loaded successfully"
+    else
+        warn "LDAP users not found. LDIF auto-loading may have failed."
+        info "Attempting manual load as fallback..."
+        if kubectl exec -n ldap openldap-0 -- ldapadd -x -H ldap://localhost:389 -D "cn=admin,dc=ldap,dc=localhost" -w password -f /ldifs/01-users.ldif 2>&1 | grep -q "adding new entry"; then
+            log "✓ LDAP users loaded manually"
+        else
+            warn "Manual load also failed. Users may already exist or check container logs."
+        fi
+    fi
+    
+    # Fix phpLDAPadmin configuration to use correct LDAP endpoint and domain
+    info "Configuring phpLDAPadmin to connect to OpenLDAP..."
+    if kubectl set env deployment/openldap-phpldapadmin -n ldap PHPLDAPADMIN_LDAP_HOSTS="#PYTHON2BASH:[{ 'openldap-0.openldap-headless.ldap.svc.cluster.local': [{'server': [{'tls': False},{'port':389}]},{'login': [{'bind_id': 'cn=admin,dc=ldap,dc=localhost'}]}]}]" >/dev/null 2>&1; then
+        info "Waiting for phpLDAPadmin to restart with new configuration..."
+        kubectl rollout status deployment/openldap-phpldapadmin -n ldap --timeout=60s >/dev/null 2>&1 || warn "phpLDAPadmin rollout may still be in progress"
+        log "✓ phpLDAPadmin configured"
+    else
+        warn "Failed to configure phpLDAPadmin, you may need to configure it manually"
     fi
     
     log "✓ OpenLDAP installed and configured"
@@ -771,22 +801,94 @@ setup_forgejo() {
     info "  ✓ users group gets restricted access"
 }
 
+setup_mailpit() {
+    step "Setting up Mailpit Email Testing Tool"
+    
+    # Verify Mailpit configuration exists
+    if [ ! -f "$PROJECT_ROOT/configs/mailpit-values.yaml" ]; then
+        error "Mailpit configuration not found at $PROJECT_ROOT/configs/mailpit-values.yaml"
+    fi
+    
+    # Check if local chart exists, otherwise use remote repo
+    local mailpit_chart=""
+    if ls "$PROJECT_ROOT/charts/setup/mailpit-"*.tgz 1> /dev/null 2>&1; then
+        mailpit_chart=$(ls "$PROJECT_ROOT/charts/setup/mailpit-"*.tgz | head -1)
+        info "Using local Mailpit chart: $mailpit_chart"
+    else
+        info "Local Mailpit chart not found, adding remote repository..."
+        retry_with_backoff 3 "helm repo add jouve https://jouve.github.io/charts/"
+        retry_with_backoff 3 "helm repo update"
+        mailpit_chart="jouve/mailpit"
+        info "Using remote Mailpit chart: $mailpit_chart"
+    fi
+    
+    # Create mailpit namespace
+    ensure_namespace "mailpit"
+    
+    # Install Mailpit with retry
+    info "Installing Mailpit Email Testing Tool..."
+    retry_with_backoff 3 "helm upgrade --install mailpit '$mailpit_chart' -n mailpit --values '$PROJECT_ROOT/configs/mailpit-values.yaml' --timeout 10m"
+    
+    # Wait for Mailpit to be ready
+    info "Waiting for Mailpit deployment to be ready..."
+    if ! wait_for_deployment "mailpit-service" "mailpit" 300; then
+        error "Mailpit deployment failed to become ready"
+    fi
+    
+    log "✓ Mailpit Email Testing Tool installed and configured"
+}
+
 # =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 
 main() {
-    # Execute all setup steps
+    # Execute sequential setup steps (required dependencies)
     check_prerequisites
     create_kind_config
     create_kind_cluster
     install_ingress_nginx
     configure_localhost_dns
-    setup_openldap
-    setup_dex_oidc
-    setup_prometheus
-    setup_argocd
-    setup_forgejo
+    
+    # Execute parallel setup steps (helm installations that can run concurrently)
+    info "Starting parallel installation of services..."
+    
+    # Run helm installations in parallel using background jobs
+    local pids=()
+    
+    setup_openldap &
+    pids+=($!)
+    
+    setup_dex_oidc &
+    pids+=($!)
+    
+    setup_prometheus &
+    pids+=($!)
+    
+    setup_argocd &
+    pids+=($!)
+    
+    setup_forgejo &
+    pids+=($!)
+    
+    setup_mailpit &
+    pids+=($!)
+    
+    # Wait for all parallel jobs to complete
+    info "Waiting for all parallel installations to complete..."
+    local failed=0
+    for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+            failed=1
+            error "One of the parallel installations failed (PID: $pid)"
+        fi
+    done
+    
+    if [ $failed -eq 1 ]; then
+        error "Some parallel installations failed. Check the logs above."
+    fi
+    
+    log "✓ All parallel installations completed successfully"
     
     # Display final summary
     echo -e "\n${GREEN}========================================${NC}"
@@ -798,11 +900,24 @@ main() {
     echo -e "  📊 Grafana Dashboard: ${BLUE}http://grafana.localhost${NC} (OIDC required)"
     echo -e "  🚀 ArgoCD: ${BLUE}http://argocd.localhost${NC} (OIDC required)"
     echo -e "  🐙 Git Platform: ${BLUE}http://forgejo.localhost${NC} (OIDC available)"
+    echo -e "  📧 Email Testing: ${BLUE}http://mailpit.localhost${NC} (Web UI)"
     echo -e ""
     echo -e "${CYAN}Test Users (password: 'password' for all):${NC}"
     echo -e "  👑 Dev Admin 1: ${YELLOW}dev1@local.dev${NC} (super-admin)"
     echo -e "  👑 Dev Admin 2: ${YELLOW}dev2@local.dev${NC} (admin)"
     echo -e "  👤 Regular User: ${YELLOW}user1@local.dev${NC}"
+    echo -e ""
+    echo -e "${CYAN}LDAP Directory Service:${NC}"
+    echo -e "  🌐 phpLDAPadmin UI: ${BLUE}http://ldap.localhost${NC}"
+    echo -e "  🔐 Login DN: ${YELLOW}cn=admin,dc=ldap,dc=localhost${NC}"
+    echo -e "  🔑 Password: ${YELLOW}password${NC}"
+    echo -e "  📂 Users Base DN: ${BLUE}ou=people,dc=ldap,dc=localhost${NC}"
+    echo -e "  📂 Groups Base DN: ${BLUE}ou=groups,dc=ldap,dc=localhost${NC}"
+    echo -e "  🔗 LDAP Server (for apps): ${BLUE}openldap-0.openldap-headless.ldap.svc.cluster.local:389${NC}"
+    echo -e ""
+    echo -e "${CYAN}Email Testing (Mailpit):${NC}"
+    echo -e "  📧 SMTP Server: ${BLUE}mailpit-service.mailpit.svc.cluster.local:1025${NC} (for apps)"
+    echo -e "  🌐 Web Interface: ${BLUE}http://mailpit.localhost${NC} (for developers)"
     echo -e ""
     echo -e "${CYAN}Helm Package Registry:${NC}"
     echo -e "  📦 Push Helm Chart: ${BLUE}helm push mychart-1.0.0.tgz oci://forgejo.localhost/forge --plain-http${NC}"

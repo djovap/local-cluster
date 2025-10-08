@@ -1,10 +1,30 @@
 # OpenLDAP configuration for development
-# Based on helm-openldap/openldap chart (jp-gouin)
+# Based on helm-openldap/openldap-stack-ha chart (jp-gouin)
+#
+# IMPORTANT NOTES:
+# 1. This configuration uses osixia/openldap image (not bitnami)
+# 2. The chart configures container ports as 1389/1636, but osixia listens on 389/636
+# 3. Applications should use the headless service endpoint for reliable connectivity:
+#    openldap-0.openldap-headless.ldap.svc.cluster.local:389
+# 4. Custom LDIF files are automatically loaded on container startup via LDAP_SEED_INTERNAL_LDIF_PATH
+#    The Helm chart mounts customLdifFiles to /ldifs/, and osixia/openldap auto-loads them
+#
+# Domain Configuration: dc=ldap,dc=localhost
+# Base DN for users: ou=people,dc=ldap,dc=localhost
+# Base DN for groups: ou=groups,dc=ldap,dc=localhost
+
+# Global OpenLDAP configuration (used by Helm chart)
+global:
+  ldapDomain: "ldap.localhost"
+  ldapPort: 389
+  sslLdapPort: 636
+  adminUser: "admin"
+  adminPassword: "password"
+  configUser: "admin" 
+  configPassword: "password"
 
 # Deployment configuration
 replicaCount: 1 # Single replica for development
-strategy:
-  type: Recreate # Simple recreation strategy for dev
 
 # Image configuration
 image:
@@ -12,18 +32,16 @@ image:
   tag: 1.5.0
   pullPolicy: IfNotPresent
 
-# Logging
-logLevel: info
-
-# TLS disabled for development simplicity
-tls:
-  enabled: false
+# Container ports for osixia image (different from bitnami)
+containerPorts:
+  ldapPort: 389
+  sslLdapPort: 636
 
 # LDAP Environment variables
 env:
   LDAP_LOG_LEVEL: "256"
   LDAP_ORGANISATION: "Local Development"
-  LDAP_DOMAIN: "example.com"
+  LDAP_DOMAIN: "ldap.localhost"
   LDAP_READONLY_USER: "false"
   LDAP_BACKEND: "mdb"
   LDAP_TLS: "false"
@@ -31,21 +49,20 @@ env:
   CONTAINER_LOG_LEVEL: "4"
   KEEP_EXISTING_CONFIG: "false"
   LDAP_REMOVE_CONFIG_AFTER_SETUP: "true"
-
-# Admin credentials
-adminPassword: password
-configPassword: password
+  LDAP_ROOT: "dc=ldap,dc=localhost"
+  # Auto-load LDIF files from /ldifs directory on container startup
+  LDAP_SEED_INTERNAL_LDIF_PATH: "/ldifs"
 
 # Custom LDIF files to initialize users and groups
 customLdifFiles:
   01-users.ldif: |-
     # People organizational unit
-    dn: ou=people,dc=example,dc=com
+    dn: ou=people,dc=ldap,dc=localhost
     objectClass: organizationalUnit
     ou: people
 
     # LDAP Admin user (for binding)
-    dn: cn=admin,dc=example,dc=com
+    dn: cn=admin,dc=ldap,dc=localhost
     objectClass: person
     objectClass: inetOrgPerson
     sn: Administrator
@@ -56,7 +73,7 @@ customLdifFiles:
     userpassword: password
 
     # Developer user 1 (Super Admin)
-    dn: cn=developer1,ou=people,dc=example,dc=com
+    dn: cn=developer1,ou=people,dc=ldap,dc=localhost
     objectClass: person
     objectClass: inetOrgPerson
     sn: Developer
@@ -67,7 +84,7 @@ customLdifFiles:
     userpassword: password
 
     # Developer user 2 (Admin)
-    dn: cn=developer2,ou=people,dc=example,dc=com
+    dn: cn=developer2,ou=people,dc=ldap,dc=localhost
     objectClass: person
     objectClass: inetOrgPerson
     sn: Developer
@@ -78,7 +95,7 @@ customLdifFiles:
     userpassword: password
 
     # Regular user
-    dn: cn=user1,ou=people,dc=example,dc=com
+    dn: cn=user1,ou=people,dc=ldap,dc=localhost
     objectClass: person
     objectClass: inetOrgPerson
     sn: User
@@ -89,32 +106,34 @@ customLdifFiles:
     userpassword: password
 
     # Groups organizational unit
-    dn: ou=groups,dc=example,dc=com
+    dn: ou=groups,dc=ldap,dc=localhost
     objectClass: organizationalUnit
     ou: groups
 
     # Super admins group
-    dn: cn=super-admins,ou=groups,dc=example,dc=com
+    dn: cn=super-admins,ou=groups,dc=ldap,dc=localhost
     objectClass: groupOfNames
     cn: super-admins
-    member: cn=developer1,ou=people,dc=example,dc=com
+    member: cn=developer1,ou=people,dc=ldap,dc=localhost
 
     # Admins group
-    dn: cn=admins,ou=groups,dc=example,dc=com
+    dn: cn=admins,ou=groups,dc=ldap,dc=localhost
     objectClass: groupOfNames
     cn: admins
-    member: cn=developer2,ou=people,dc=example,dc=com
+    member: cn=developer2,ou=people,dc=ldap,dc=localhost
 
     # Users group
-    dn: cn=users,ou=groups,dc=example,dc=com
+    dn: cn=users,ou=groups,dc=ldap,dc=localhost
     objectClass: groupOfNames
     cn: users
-    member: cn=user1,ou=people,dc=example,dc=com
+    member: cn=user1,ou=people,dc=ldap,dc=localhost
 
 # Service configuration
 service:
   type: ClusterIP
   ldapPort: 389
+  enableLdapPort: true
+  enableSslLdapPort: true
 
 # Resource limits
 resources:
@@ -125,9 +144,66 @@ resources:
     cpu: 50m
     memory: 128Mi
 
-# Disable problematic ingress resources (incompatible with K8s 1.22+)
+# Disable default probes and use custom ones for osixia image
+livenessProbe:
+  enabled: false
+readinessProbe:
+  enabled: false  
+startupProbe:
+  enabled: false
+
+# Custom probes for osixia/openldap image - use exec to check if slapd process is running
+customLivenessProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - slapd
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 10
+
+customReadinessProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - slapd
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 10
+
+customStartupProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - slapd
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 30
+
 ltb-passwd:
   enabled: false
 
 phpldapadmin:
-  enabled: false
+  enabled: true
+  env:
+    PHPLDAPADMIN_LDAP_CLIENT_TLS_REQCERT: "never"
+    # Configure phpLDAPadmin to connect to OpenLDAP with correct domain
+    PHPLDAPADMIN_LDAP_HOSTS: "#PYTHON2BASH:[{ 'openldap-0.openldap-headless.ldap.svc.cluster.local': [{'server': [{'tls': False},{'port':389}]},{'login': [{'bind_id': 'cn=admin,dc=ldap,dc=localhost'}]}]}]"
+  ingress:
+    enabled: true
+    annotations: {}
+    ingressClassName: nginx
+    path: /
+    pathType: Prefix
+    hosts:
+    - ldap.localhost
+    tls: []

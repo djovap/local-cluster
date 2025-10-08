@@ -1,4 +1,12 @@
 # Dex OIDC configuration for development environment
+#
+# LDAP Connector Configuration:
+# - Uses OpenLDAP as the authentication backend
+# - LDAP endpoint: openldap-0.openldap-headless.ldap.svc.cluster.local:389
+# - Domain: dc=ldap,dc=localhost
+# - Users: ou=people,dc=ldap,dc=localhost
+# - Groups: ou=groups,dc=ldap,dc=localhost
+
 image:
   tag: v2.38.0
 
@@ -12,7 +20,7 @@ grpc:
 
 config:
   issuer: http://dex.localhost
-  
+
   storage:
     type: kubernetes
     config:
@@ -23,19 +31,20 @@ config:
       name: OpenLDAP
       id: ldap
       config:
-        host: openldap.ldap:389
+        # Use headless service to reach pod directly on its actual port
+        host: openldap-0.openldap-headless.ldap.svc.cluster.local:389
 
         # No TLS for development setup
         insecureNoSSL: true
 
         # Admin credentials for LDAP binding
-        bindDN: cn=admin,dc=example,dc=com
+        bindDN: cn=admin,dc=ldap,dc=localhost
         bindPW: password
 
         usernamePrompt: Email Address
 
         userSearch:
-          baseDN: ou=people,dc=example,dc=com
+          baseDN: ou=people,dc=ldap,dc=localhost
           filter: "(objectClass=person)"
           username: mail
           idAttr: DN
@@ -43,7 +52,7 @@ config:
           nameAttr: cn
 
         groupSearch:
-          baseDN: ou=groups,dc=example,dc=com
+          baseDN: ou=groups,dc=ldap,dc=localhost
           filter: "(objectClass=groupOfNames)"
           userAttr: DN
           groupAttr: member
