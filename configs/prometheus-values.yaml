@@ -101,7 +101,7 @@ grafana:
     
     # Disable basic auth and admin user
     auth.basic:
-      enabled: false
+      enabled: true
     
     # Users configuration - allow both admin and OIDC
     users:
@@ -132,6 +132,11 @@ grafana:
     # Fix for volume mount issues
     type: pvc
     annotations: {}
+  
+  # Disable init container - fsGroup handles permissions automatically
+  # The init-chown-data container fails when PVC has existing data
+  initChownData:
+    enabled: false
     
   # Security context - simplified to avoid conflicts
   securityContext:
@@ -160,19 +165,12 @@ grafana:
   # Default dashboards
   defaultDashboardsEnabled: true
   
-  # Additional dashboards
-  dashboardProviders:
-    dashboardproviders.yaml:
-      apiVersion: 1
-      providers:
-      - name: 'default'
-        orgId: 1
-        folder: ''
-        type: file
-        disableDeletion: false
-        editable: true
-        options:
-          path: /var/lib/grafana/dashboards/default
+  # Dashboard provisioning is handled automatically by the sidecar container
+  # The sidecar watches for ConfigMaps with label grafana_dashboard=1
+  # and automatically provisions them. Manual dashboardProviders configuration
+  # has been removed to prevent path mismatch issues after Docker restarts.
+  # The sidecar will automatically create the provider configuration pointing
+  # to /tmp/dashboards where it mounts the discovered dashboard ConfigMaps.
 
 # Node Exporter - collects host-level metrics
 nodeExporter:
